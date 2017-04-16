@@ -1,0 +1,235 @@
+//////////////////////////////////////////////////////////////////
+//STEPPER MOTOR CODE ©2011 bildr 
+//Released under the MIT License - Please reuse change and share
+//Using the easy stepper with your arduino
+//use rotate and/or rotateDeg to controll stepper motor
+//speed is any number from .01 -> 1 with 1 being fastest - 
+//Slower Speed == Stronger movement
+/////////////////////////////////////////////////////////////////
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//©2017 Travis Antoniello
+//Released under the MIT License - Please reuse change and share. Incorporates code from a 2011 Bildr release also under MIT License.
+//Uses the easy stepper to rotate a stepper motor turntable and an IR LED to trigger a NIKON D3200 DSLR. Pulse can be modified to trigger your camera. 
+//Serial commands: 0-ABORT, 1-START SCAN SEQUENCE, 2-10 DEGREES CW, 3-10 DEGREES CCW, 4-TRIGGER CAMERA
+//Scan sequence will capture image then rotate. Captures 36 frames, one per 10 degree rotation. Status LED will blink for each IR trigger.
+//Abort sequence can be called during the scan sequence. This will return turntable to original position.
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+#define DIR_PIN 2 // Direction pin on Easy Driver
+#define STEP_PIN 3 // Step pin on Easy Driver
+#define STATUS_PIN 5 // Status LED flash to identify current operations
+#define IR_PIN 6 // Infrared LED used to trigger camera
+
+int input; // Serial input placeholder
+int turnsToReverse = 0; // Used by the abort function to return turntable to original position
+
+int msWaitAfterPictureTaken = 2000; // How long in ms to wait after triggering camera - may need to be adjusted based on shutter speed.
+int msWaitAfterRotation = 1000; // How long in ms to wait after rotating the turntable - may need to be adjusted if the object wobbles.
+
+
+bool standby = true; // Enters standby mode if true
+
+void setup() { 
+  pinMode(DIR_PIN, OUTPUT); 
+  pinMode(STEP_PIN, OUTPUT); 
+  pinMode(STATUS_PIN, OUTPUT);
+  pinMode(IR_PIN, OUTPUT);
+  Serial.begin(9600);
+
+  Serial.println("Entering standby mode");
+} 
+
+void loop(){ 
+
+  standbySequence();
+
+  if(Serial.available() > 0)
+  {
+    input = Serial.read();
+    switch(input)
+    {
+      case 0 + 48:
+        Serial.println("Abort sequence initiated.");
+        abortSequence(turnsToReverse);
+        Serial.println("Abort sequence completed.");
+        
+        Serial.println("Entering standby mode");
+        standby = true;
+        break;
+
+      case 1 + 48:
+        Serial.println("Starting scan sequence.");
+        scanSequence();
+        Serial.println("Scan sequence completed.");
+        break;
+
+      case 2 + 48:
+        Serial.println("DEBUG: 10 DEG CW");
+        rotateDeg(10, .01);
+        break;
+
+      case 3 + 48:
+        Serial.println("DEBUG: 10 DEG CCW");
+        rotateDeg(-10, .01);
+        break;
+
+      case 4 + 48:
+        Serial.println("DEBUG: TRIGGER CAMERA");
+        triggerCamera();
+        break;
+
+      default:
+        Serial.println("ERROR: Unknown value!");
+        break;
+        
+    }
+  }
+}
+
+
+
+
+void rotate(int steps, float speed){ 
+  //rotate a specific number of microsteps (8 microsteps per step) - (negitive for reverse movement)
+  //speed is any number from .01 -> 1 with 1 being fastest - Slower is stronger
+  int dir = (steps > 0)? HIGH:LOW;
+  steps = abs(steps);
+
+  digitalWrite(DIR_PIN,dir); 
+
+  float usDelay = (1/speed) * 70;
+
+  for(int i=0; i < steps; i++){ 
+    digitalWrite(STEP_PIN, HIGH); 
+    delayMicroseconds(usDelay); 
+
+    digitalWrite(STEP_PIN, LOW); 
+    delayMicroseconds(usDelay); 
+  } 
+} 
+
+void rotateDeg(float deg, float speed){ 
+  //rotate a specific number of degrees (negitive for reverse movement)
+  //speed is any number from .01 -> 1 with 1 being fastest - Slower is stronger
+  int dir = (deg > 0)? HIGH:LOW;
+  digitalWrite(DIR_PIN,dir); 
+
+  int steps = abs(deg)*(1/0.225);
+  float usDelay = (1/speed) * 70;
+
+  for(int i=0; i < steps; i++){ 
+    digitalWrite(STEP_PIN, HIGH); 
+    delayMicroseconds(usDelay); 
+
+    digitalWrite(STEP_PIN, LOW); 
+    delayMicroseconds(usDelay); 
+  } 
+}
+
+void standbySequence()
+{
+  while(standby && Serial.available() == 0)
+  {
+  digitalWrite(STATUS_PIN, HIGH);
+  delay(500);
+  digitalWrite(STATUS_PIN, LOW);
+  delay(500);
+  }
+}
+
+void triggerCamera()
+{
+
+  digitalWrite(STATUS_PIN, LOW);
+  int count = 0;
+
+
+  
+  
+  while(count < 3) {
+
+    
+   tone(IR_PIN,38000);
+    delay(2);
+    noTone(IR_PIN);
+    delay(28);
+    tone(IR_PIN,38000);
+    delayMicroseconds(200);
+    noTone(IR_PIN);
+    delayMicroseconds(1500);
+    tone(IR_PIN,38000);
+    delayMicroseconds(200);
+    noTone(IR_PIN);
+    delayMicroseconds(3300);
+    tone(IR_PIN,38000);
+    delayMicroseconds(200);
+    noTone(IR_PIN);
+    delayMicroseconds(100);    
+    delay(63);    
+    count++;
+  }
+
+    digitalWrite(STATUS_PIN, HIGH);
+     delay(50);
+     digitalWrite(STATUS_PIN, LOW);
+     delay(100);
+     digitalWrite(STATUS_PIN, HIGH);
+     delay(50);
+     digitalWrite(STATUS_PIN, LOW);
+     delay(100);
+
+  
+}
+
+void abortSequence(int turns)
+{
+  if(standby == false && turns <= 18)
+  {
+    
+    Serial.println("Resetting position.");
+    Serial.print("Reversing "); Serial.print(turns); Serial.println(" turns.");
+    rotateDeg(-(10*turns), .01);
+    turnsToReverse = 0;
+
+    Serial.println("Entering standby mode");
+    standby = true;
+  }
+  else if(standby == false && turns > 18)
+  {
+    
+    Serial.println("Resetting position.");
+    Serial.print("Reversing "); Serial.print(turns); Serial.println(" turns.");
+    rotateDeg(((36 - turns) * 10), .01);
+    turnsToReverse = 0;
+
+    Serial.println("Entering standby mode");
+    standby = true;
+  }
+
+  
+}
+
+
+void scanSequence()
+{
+  standby = false;
+
+  for(int i = 0; i < 36; i++)
+  {
+    if(Serial.available() == 0 && standby == false)
+    {
+    Serial.print("Capturing frame: "); Serial.println(i+1);
+    triggerCamera();
+    delay(msWaitAfterPictureTaken); // Delay after triggering camera
+    rotateDeg(10, .01);
+    delay(msWaitAfterRotation); // Delay after rotating, for object to settle
+    turnsToReverse = i + 1;
+    } 
+  }
+}
+  
+
+
+
