@@ -12,3 +12,5 @@ Project overview video: https://youtu.be/s2mI0JuVWBc
 EasyDriver Stepper Motor Driver: https://www.sparkfun.com/products/12779
 
 Stepper Motor: https://www.sparkfun.com/products/9238
+
+The 3D printed housing for the components was probably a bit overkill for a 3D printer, but hey.
